@@ -12,11 +12,6 @@ alasso_rda = function(full_df, fold_idxs, prelim_mrna){
   # estimate beta vector
   beta_hat = Coxnet(x = as.matrix(full_df[,-(1:4)]), y = full_df$surv_time,
                     penalty = "Lasso", adaptive = TRUE, nfolds = 10)$Beta0
-  # weights = 1/as.numeric(abs(coef(glmnet(x = full_df[,-(1:4)], y = full_df$surv_time,
-  #                                        family = "cox", alpha = 0, lambda = 1))))
-  # beta_hat = as.numeric(coef(glmnet(
-  #   x = full_df[,-(1:4)], y = full_df$surv_time, penalty.factor = weights, family = "cox",
-  #   lambda = 2))) # use lambda = 4 for cor matrix preliminary screen
   names(beta_hat) = colnames(full_df)[-(1:4)]
   # extract names of significant predictors
   sig_preds = names(which(beta_hat != 0))
@@ -37,21 +32,15 @@ alasso_rda = function(full_df, fold_idxs, prelim_mrna){
     test_df = test_df[,nonconst_preds]
     # estimate beta vector, measuring computation time
     start_time = Sys.time()
-    beta_hat = Coxnet(x = as.matrix(train_df[,-(1:2)]), y = train_df$surv_time,
-                      penalty = "Lasso", adaptive = TRUE, nfolds = 10)$Beta
-    # weights = c(rep(0, 2), 1/as.numeric(
-    #   abs(coef(glmnet(x = train_df[,-(1:4)], y = train_df$surv, family = "cox",
-    #                   alpha = 0, lambda = 2)))
-    # ))
-    # weights = rep(1, ncol(train_df)-2)
-    # weights[1:2] = 0
-    # beta_hat = #cv.glmnet(x = as.matrix(train_df[,-(1:2)]), y = train_df$surv_time,
-    #                      penalty.factor = weights, family = "cox",
-    #                      type.measure = "C")$lambda.min %>%
-    #  glmnet(x = train_df[,-(1:2)], y = train_df$surv_time,
-    #         penalty.factor = weights, family = "cox", lambda = 2) %>%
-    #  coef(.) %>%
-    #  as.numeric(.)
+    # Coxnet doesn't permit removing the regularization penalty from certain features,
+    # using glmnet to accomplish this instead
+    weights = c(rep(0, 2), 1/abs(as.numeric(
+      coef(cv.glmnet(as.matrix(train_df[,-(1:4)]), train_df$surv_time, alpha = 0,
+                     family = "cox", type.measure = "C"), s = "lambda.min"))))
+    beta_hat = as.numeric(
+      coef(cv.glmnet(as.matrix(train_df[,-(1:2)]), train_df$surv_time, alpha = 1,
+                     family = "cox", type.measure = "C", penalty.factor = weights),
+           s = "lambda.min"))
     comp_time = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
     # get risk scores
     test_df$risk_score = as.vector(exp(-(as.matrix(test_df[,-(1:2)]) %*% beta_hat)))
