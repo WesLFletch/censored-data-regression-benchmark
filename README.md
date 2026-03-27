@@ -53,6 +53,8 @@ Note that computing and plotting APC is computationally and memory intensive.
   - Comparing out-of-bag and held-out predictive metrics for evaluating RSF
 - `supplementary/rsf_tuning_comp.R`: Performs one of the supplementary studies in our appendix:
   - Comparing three assignments of RSF hyperparameters, including R package defaults, cross-validation tuned hyperparameters (done at runtime), and the assignments we used in the benchmark (minimum nodesize of 8, and 403 candidate splitting features)
+- `supplementary/pfs_sensitivity_analysis.R`: Performs one of the supplementary studies in our appendix:
+  - Using the same data and fold assignments from the real data analysis, examine the sensitivity of our PFS step.
 
 Note that these files can be computationally intensive to run.
 
