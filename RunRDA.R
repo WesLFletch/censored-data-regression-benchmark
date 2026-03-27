@@ -49,17 +49,10 @@ metrics = c(
 nfolds = 10
 
 # read and prepare full data
-standardize = function(full_df, static_idxs){
-  full_df[,-static_idxs] = scale(full_df[,-static_idxs])
-  full_df = full_df[,colSums(is.na(full_df))==0]
-  return(full_df)
-}
-# load data and standardize covaraites to mean 0 variance 1
-full_df = standardize(readRDS(cohort_file), 1:4)
-# remove the columns that were not retained by PFS
-full_df = full_df[,colnames(full_df) %in% c(colnames(full_df)[1:2], readRDS(PFS_file))]
+unscaled_df = readRDS(cohort_file)[,-1] %>%
+  {\(df)df[,colnames(df) %in% c(colnames(df)[1], readRDS(PFS_file))]}()
 # get binary vector for use in calculating true positives
-pos_controls_bin = colnames(full_df)[-(1:2)] %in% pos_controls_char
+pos_controls_bin = colnames(unscaled_df)[-1] %in% pos_controls_char
 
 # NOTE: This is the beginning of the parallel computing over multiple cores for
 # efficiency. Expect runtimes exceeding an hour on high-performance hardware.
@@ -86,7 +79,18 @@ raw_list = foreach(m = 1:length(methods), .packages = c( # each core gets a meth
   # evaluate the method on all folds
   inner_results = lapply(fold_idxs, \(oob)tryCatch({ # apply over folds
     # perform train-test split
-    X_train = full_df[-oob,-(1:2)]; X_test = full_df[oob, -(1:2)]
+    full_df = {\(){ # scale features so the training set has mean 0 variance 1
+      cmeans = colMeans(unscaled_df[-oob,-1]) %>%
+        rep(each=nrow(unscaled_df)) %>%
+        matrix(nrow=nrow(unscaled_df))
+      csds = apply(unscaled_df[-oob,-1], 2, sd) %>%
+        rep(each=nrow(unscaled_df)) %>%
+        matrix(nrow=nrow(unscaled_df))
+      ((unscaled_df[,-1]-cmeans)/csds) %>%
+        data.frame(surv_time = unscaled_df$surv_time, .) %>%
+        {\(df){df[,is.na(df[1,])]=0;df}}()
+    }}()
+    X_train = full_df[-oob,-1]; X_test = full_df[oob, -1]
     Y_train = full_df$surv_time[-oob]; Y_test = full_df$surv_time[oob]
     start_time = Sys.time() # begin counting computation time
     out = method(X_train, Y_train) # perform the method on training data
